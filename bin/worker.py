@@ -25,6 +25,12 @@ class Worker:
             # TODO support sockets and stuffs
             if 'unix_socket_path' in config["redis"]:
                 self.redis = Redis(unix_socket_path = config["redis"]["unix_socket_path"])
+            elif 'host' in config["redis"]:
+                if 'port' in config["redis"]:
+                    port = config["redis"]["port"]
+                else:
+                    port = 6379
+                self.redis = Redis(host=config["redis"]["host"], port=port)
 
 
     def fetch_thumb_job(self):

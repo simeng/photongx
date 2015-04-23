@@ -754,12 +754,20 @@ end
 local function init_db()
     -- Start redis connection
     red = redis:new()
+    local ok = nil
+    local err = nil
     if config.redis.unix_socket_path then
-        local ok, err = red:connect("unix:" .. config.redis.unix_socket_path)
-        if not ok then
-            ngx.say("failed to connect: ", err)
-            return
+        ok, err = red:connect("unix:" .. config.redis.unix_socket_path)
+    elseif config.redis.host then
+        local port = 6379
+        if config.redis.port then
+            port = config.redis.port
         end
+        ok, err = red:connect(config.redis.host, port)
+    end
+    if not ok then
+        ngx.say("failed to connect: ", err)
+        return
     end
 end
 
