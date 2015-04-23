@@ -1,55 +1,17 @@
-    {( "header.html" )}
-
-<div class="container">
-    <div class="row">
-        <div class="span12">
-    
-        <div class="hero-unit">
-            <h1>Upload<small>to album <a href="{{BASE}}album/{{tag}}/{{album}}/">{{ album }}</a></h1>
-                <div class="small pull-right"><a href="#" id="fileSelect-show"> Alternate upload</a></div>
-        </div>
-         
-        <div id="fileDrop">
-            <p>Drop files here to upload</p>
-        </div>
-    </div>
-    </div>
-
-
-    <div class="row">
-        <div class="span12">
-<div id="fileSelect" class="hidden">
-    <div class="small pull-right"><a href="#" id="fileSelect-hide">Hide alternate upload</a></div>
-    <p>
-        <form action="" method="post" enctype="multipart/form-data">
-            <div class="controls">
-                <input class="input-file" type="file" id="fileField" name="fileField" multiple value="Browse..."/>
-            </div>
-        </form>
-    </p>
-    <p>
-      <a id="upload" class="btn" href="#" title="Upload all files in list">Upload files</a>
-      <a id="reset" class="btn" href="#" title="Remove all files from list">Clear list</a>
-    </p>
-</div>
-
-<div id="files">
-    <ul id="fileList"></ul>
-</div>
-</div>
-</div>
-</div>
-
-<script src="{{BASE}}static/md5.js"></script>
-<script> 
-  var album = '{{ album }}';
-  var tag = '{{ tag }}';
-  function FileAPI (t, d, f) {
+/* FileAPI from filebin.net (C) Espen Braastad */
+/* Modifications by Tor Hveem */
+function FileAPI (c, t, d, f, g, a) {
   
-      var fileList = t,
+      var fileCount = c,
+          fileList = t,
           dropZone = d,
           fileField = f,
-          fileQueue = new Array()
+          counter_queue = 0,
+          counter_uploading = 0,
+          counter_completed = 0,
+          fileQueue = new Array(),
+          album = a,
+          tag = g,
           preview = null;
   
   
@@ -65,6 +27,20 @@
           addFileListItems(this.files);
       }
   
+      function updateFileCount() {
+          var text = "Status: " + counter_completed + " of " + counter_queue + " file";
+          if (counter_queue != 1){
+              text = text + "s";
+          }
+          text = text + " uploaded";
+
+          if (counter_completed == counter_queue) {
+              fileCount.textContent = text + ", all done!";
+        } else {
+              fileCount.textContent = text + ", please wait ...";
+        }
+      }
+
       this.showDroppedFiles = function (ev) {
           ev.stopPropagation();
           ev.preventDefault();
@@ -111,24 +87,27 @@
           ev.preventDefault();
           while (fileQueue.length > 0) {
               var item = fileQueue.shift();
-              var p = document.createElement("p");
-              p.className = "loader";
-              var pText = document.createTextNode("Pending...");
-              p.appendChild(pText);
-              item.li.appendChild(p);
+              var div = document.createElement("div");
+              div.className = "loader";
+              var divText = document.createTextNode("Pending...");
+              div.appendChild(divText);
+              item.li.appendChild(div);
               if (item.file.size < 32212254720) {
-                  p.style["color"] = "#3a87ad";
+                  div.style["color"] = "#3a87ad";
                   uploadFile(item.file, item.li);
               } else {
-                  p.textContent = "File to large (>30GB)";
-                  p.style["color"] = "red";
+                  div.textContent = "File to large (>30GB)";
+                  div.style["color"] = "red";
               }
           }
       }
   
       var addFileListItems = function (files) {
+          counter_queue += files.length;
+          updateFileCount();
+
           for (var i = 0; i < files.length; i++) {
-              //var fr = new FileReader();
+              var fr = new FileReader();
               //fr.file = files[i];
               //fr.onloadend = showFileInList;
               showFileInList(files[i])
@@ -147,25 +126,27 @@
               //    thumb.addEventListener("mouseout", removePreview, false);
               //    li.appendChild(thumb);
               //}
-              var h5 = document.createElement("h5");
-              var h5Text = document.createTextNode(file.name);
-              h5.appendChild(h5Text);
-              li.appendChild(h5)
-              var p = document.createElement("p");
+              var mime = file.type;
+              if (mime.length == 0){
+                  mime = "unknown";
+              }
               var pText = document.createTextNode(
-                  "File type: "
-                  + file.type + ", size: " +
+                  file.name + ", " +
+                  mime + ", size: " +
                   Math.round(file.size / 1024 / 1024) + " MB"
               );
-              p.appendChild(pText);
-              li.appendChild(p);
+              li.appendChild(pText);
               var divContainer = document.createElement("div");
-              divContainer.className = "progress progress-striped active";
+              divContainer.className = "progress";
               var divLoader = document.createElement("div");
-              divLoader.className = "bar";
+              divLoader.className = "progress-bar";
               li.appendChild(divContainer);
               divContainer.appendChild(divLoader);
               fileList.appendChild(li);
+
+              counter_uploading += 1;
+              updateFileCount();
+
               fileQueue.push({
                   file : file,
                   li : li
@@ -222,82 +203,74 @@
       var uploadFile = function (file, li) {
           if (li && file) {
               var xhr = new XMLHttpRequest(),
-                  upload = xhr.upload;
+                  upload = xhr.upload,
+                  fd = FormData();
+
               upload.addEventListener("progress", function (ev) {
                   if (ev.lengthComputable) {
                       var loader = li.getElementsByTagName("div")[1];
                       loader.style["width"] = (ev.loaded / ev.total) * 100 + "%";
-                      var ps = li.getElementsByTagName("p");
+                      var ps = li.getElementsByTagName("div");
                       for (var i = 0; i < ps.length; i++) {
                           if (ps[i].className == "loader") {
                               var percent = (ev.loaded / ev.total) * 100;
                               ps[i].textContent = "Uploading... " + percent.toFixed(2) + "%";
-                              ps[i].style["color"] = "#c09853";
+                              ps[i].style["color"] = "#000000";
                               break;
                           }
                       }
                   }
               }, false);
               upload.addEventListener("load", function (ev) {
-                  var ps = li.getElementsByTagName("p");
-                  var div = li.getElementsByTagName("div")[1];
-                  div.style["width"] = "100%";
-                  div.style["backgroundColor"] = "#468847";
+                  var ps = li.getElementsByTagName("div");
+                  var divContainer = li.getElementsByTagName("div")[0];
+                  var divBar = li.getElementsByTagName("div")[1];
+                  divBar.style["width"] = "100%";
                   for (var i = 0; i < ps.length; i++) {
                       if (ps[i].className == "loader") {
-                          ps[i].textContent = "Upload complete";
-                          ps[i].style["color"] = "white";
+                          counter_uploading -= 1;
+                          counter_completed += 1;
+                          updateFileCount();
+
+                          ps[i].textContent = xhr.responseText;
+                          //ps[i].style["color"] = "white";
                           break;
                       }
                   }
               }, false);
               upload.addEventListener("error", function (ev) {console.log(ev);}, false);
+              upload.addEventListener("abort", function (ev) {console.log(ev);}, false);
+              fd.append("attachment1", file);
               xhr.open(
                   "POST",
                   "/upload/post/"
               );
-              xhr.setRequestHeader("Cache-Control", "no-cache");
               xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
-              xhr.setRequestHeader("X-File-Name", file.name);
-              xhr.setRequestHeader("X-Album", album);
+              xhr.setRequestHeader("X-Filename", file.name);
+              xhr.setRequestHeader("X-Size", file.size);
               xhr.setRequestHeader("X-Tag", tag);
-              xhr.setRequestHeader("Content-MD5", calcMD5(file));
-              xhr.send(file);
+              xhr.setRequestHeader("X-Album", album);
+              // TODO use filereader to read file and check md5
+              xhr.setRequestHeader("X-Checksum", calcMD5(file));
+              // Check upload respone and error message
+              xhr.onload = function() {
+                  var ps = li.getElementsByTagName("div");
+                  var divContainer = li.getElementsByTagName("div")[0];
+                  var divBar = li.getElementsByTagName("div")[1];
+                  if(xhr.status == 200) {
+                      divContainer.className = "progress";
+                      divBar.className = "progress-bar progress-bar-success";
+                  }else if(xhr.status == 403) {
+                      divBar.className = "progress-bar progress-bar-danger";
+                  }
+                  for (var i = 0; i < ps.length; i++) {
+                      if (ps[i].className == "loader") {
+                          ps[i].textContent = xhr.responseText;
+                          break;
+                      }
+                  }
+              }
+              xhr.send(fd);
           }
       }
-      
   }
-  
-  window.onload = function () {
-      if (typeof FileReader == "undefined") alert ("Your browser is not supported. You will need to update to a modern browser with File API support to upload files.");
-      var fileList = document.getElementById("fileList");
-      var fileDrop = document.getElementById("fileDrop");
-      var fileField = document.getElementById("fileField");
-      FileAPI = new FileAPI(
-          fileList,
-          fileDrop,
-          fileField
-      );
-      FileAPI.init();
-
-      // Automatically start upload when using the drop zone
-      fileDrop.ondrop = FileAPI.uploadQueue;
-      //fileField.onkeypress = FileAPI.uploadQueue;
-
-      var reset = document.getElementById("reset");
-      reset.onclick = FileAPI.clearList;
-      var upload = document.getElementById("upload");
-      upload.onclick = FileAPI.uploadQueue;
-  }
-
-  $('#fileSelect-show').bind('click', function() {
-    $('#fileSelect').toggleClass('hidden');
-    return false;
-  });
-  $('#fileSelect-hide').bind('click', function() {
-    $('#fileSelect').toggleClass('hidden');
-    return false;
-  });
-</script>
-    {( "footer.html" )}
-

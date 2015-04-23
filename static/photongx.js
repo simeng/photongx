@@ -1,31 +1,26 @@
-var photongx = (function() {
+var photongx = (function($container, $items) {
+    var slideshow = false,
+        currentimage = 0,
+        slideshowtimer,
+        interval = 3000,
+        offset = 4;
+
     $.fn.preload = function() {
         this.each(function(){
             // Check if url starts with /
             if (this[0] == '/') {
-                //console.log(String(this));
                 $('<img>')[0].src = this;
             }
         });
     }
     $(window).on("debouncedresize", function(event) {
         setColumnwidth();
-        $('.item').wookmark({
-            container: $('.items'),
-            autoResize: false,
-            offset: 6
-        });
+        $container.trigger('refreshWookmark');
     });
 
-    var slideshow = false;
-    var $container = $('.items');
-    var currentimage = 0;
-    var slideshowtimer;
-    var interval = 3000;
-
     // calculate and set optimal column size
-    var setColumnwidth = function() {
-        var docwidth = $(document).width();
+    this.setColumnwidth = function() {
+        var docwidth = document.body.clientWidth;
         var cwidth = 0;
         var columns = 0;
         // Decide on the best column width depending on docwidth
@@ -41,21 +36,30 @@ var photongx = (function() {
         else if (docwidth < 790)
             columns = 1;
 
-        // also subtract 3*columns, since every item got 6 px margin, 3 on each side
-        cwidth = (docwidth / columns) - (4*columns); 
-        $('.item').css('max-width', cwidth + 'px');
-        $('.item img').css('width', cwidth + 'px');
+        // also subtract columns*offsett, since every item got offset px margin, offset/2 on each side
+        cwidth = docwidth / columns - (offset*(columns-1)); 
+        //$('.item').css('max-width', cwidth + 'px');
+        $items.find('img').css('width', cwidth + 'px');
         console.log('Decided on ', columns, ' columns with docwidth ', docwidth);
     }
-
     setColumnwidth();
+
+    this.wookmarkIt = function() {
+        setColumnwidth();
+        $items.wookmark({
+            container: $container,
+            autoResize: false,
+            flexibleWidth: false,
+            outerOffset: 0,
+            offset: offset
+        });
+    }
+
     
     $container.imagesLoaded(function( $images, $proper, $broken ) {
-        $('.item').wookmark({
-            container: $('.items'),
-            autoResize: false,
-            offset: 6
-        });
+        //setColumnwidth();
+
+        wookmarkIt();
 
         // We are loaded, so hide the spinner
         $('.spinner').addClass('hidden');
@@ -99,6 +103,7 @@ var photongx = (function() {
         createLB();
 
         setLBimage(image_href);
+        countView($(this).data('filename'));
 
         showLB();
     });
@@ -108,15 +113,15 @@ var photongx = (function() {
             //create HTML markup for lightbox window
             var lightbox = 
             '<div id="lightbox" class="hidden">' +
-                '<p>' +
-                '<a id="play" href="#"><i class="icon-play"></i></a>' +
-                '<a id="goFS" href="#"><i class="icon-fullscreen"></i></a>' +
-                '<a id="hideLB" href="#"><i class="icon-remove"></i></a></p>' +
-                '<a href="#prev" id="prev"><div><i class="icon-chevron-left"></i></div></a>' +
-                    '<div id="content">' + //insert clicked link's href into img src
+                '<div class="action-group">' +
+                '<a id="play" href="#" title="Toggle slideshow"><i class="fa fa-play"></i></a>' +
+                '<a id="goFS" href="#" title="Toggle full screen"><i class="fa fa-arrows-alt"></i></a>' +
+                '<a id="hideLB" href="# title="Close image""><i class="fa fa-times"></i></a></div>' +
+                '<a href="#prev" id="prev" title="Previous image"><div><i class="fa fa-backward"></i></div></a>' +
+                    '<div id="lbcontent">' + //insert clicked link's href into img src
                         '<img class="lbimg" id="img-front" src="">' +
                     '</div>' +  
-                '<a href="#next" id="next"><div><i class="icon-chevron-right"></i></div></a>' +
+                '<a href="#next" id="next" title="Next image"><div><i class="fa fa-forward"></i></div></a>' +
             '</div>';
                 
             //insert lightbox HTML into page
@@ -152,7 +157,7 @@ var photongx = (function() {
 
             // Handle clicks on the play link
             $('#play').bind('click', function(e) {
-                if($('#play i').hasClass('icon-play')) {
+                if($('#play i').hasClass('fa-play')) {
                     play();
                 }else {
                     pause();
@@ -176,7 +181,7 @@ var photongx = (function() {
         if(slideshow) {
 
             $('#img-front').css('opacity', 0).bind("transitionend webkitTransitionEnd oTransitionEnd MSTransitionEnd", function(){ 
-                $('#content').html('<img class="lbimg" id="img-front" src="' + image_href +'">');
+                $('#lbcontent').html('<img class="lbimg" id="img-front" src="' + image_href +'">');
                 //$('#img-front').attr('src', image_href);
                 $('#img-front').css('opacity', 0.999).bind("transitionend webkitTransitionEnd oTransitionEnd MSTransitionEnd", function(){ 
                     $('#img-front').css('opacity', 1);
@@ -186,18 +191,13 @@ var photongx = (function() {
         }else {
             $('#img-front').attr('src', image_href);
         }
-
-        // Count the viewing
-        $.getJSON('/api/img/click/', { 'img':image_href}, function(data) {
-            //console.log(data);
-        });
         // TODO scrollto background pos img
 
     };
     this.showLB = function() {
-        $('#content').imagesLoaded(function( $images, $proper, $broken ) {
+        $('#lbcontent').imagesLoaded(function( $images, $proper, $broken ) {
             // effects for background
-            $('.items').addClass('backgrounded');
+            $container.addClass('backgrounded');
             //show lightbox window - you could use .show('fast') for a transition
             $('#lightbox').removeClass('hidden').show();
             // We are loaded, so hide the spinner
@@ -207,11 +207,11 @@ var photongx = (function() {
     };
         
     var hideLB = function() {
-        if($('#goFS i').hasClass('icon-resize-small')) {
+        if($('#goFS i').hasClass('fa fa-compress')) {
             document.cancelFullScreen();
         }
         // effects for background
-        $('.items').removeClass('backgrounded');
+        $container.removeClass('backgrounded');
         //$('#lightbox').hide();
         $('#lightbox').hide();
         // Stop any running slideshow;
@@ -228,7 +228,7 @@ var photongx = (function() {
     document.cancelFullScreen = document.webkitExitFullscreen || document.mozCancelFullScreen || document.exitFullscreen;
     
     var goFS = function(e) {
-        if($('#goFS i').hasClass('icon-fullscreen')) {
+        if($('#goFS i').hasClass('fa-arrows-alt')) {
 
             var elem = document.getElementById('lightbox');
 
@@ -238,31 +238,32 @@ var photongx = (function() {
                 elem.mozRequestFullScreen();
             } else if (elem.webkitRequestFullScreen) {
                 elem.webkitRequestFullScreen();
+            } else if (elem.msRequestFullscreen) {
+                elem.msRequestFullScreen();
             }
             elem.onwebkitfullscreenchange = onFullScreenExit;
             elem.onmozfullscreenchange = onFullScreenExit;
 
-            $('#goFS i').removeClass('icon-fullscreen').addClass('icon-resize-small');
+            $('#goFS i').removeClass('fa-arrows-alt').addClass('fa-compress');
         }else {
             document.cancelFullScreen();
-            $('#goFS i').removeClass('icon-resize-small').addClass('icon-fullscreen');
+            $('#goFS i').removeClass('fa-compress').addClass('fa-arrows-alt');
         }
     }
     var onFullScreenExit = function() {
         console.log('onFSExit');
-        //$('#goFS i').removeClass('icon-resize-small').addClass('icon-fullscreen');
     }
     
 
     // Slideshow
     var play = function() {
-        $('#play i').removeClass('icon-play').addClass('icon-pause');
+        $('#play i').removeClass('fa-play').addClass('fa-pause');
         slideshow = true;
         slideshowtimer = setInterval(function(){ $(document).trigger("next_image"); }, interval);
     }
     // Slideshow
     var pause = function() {
-        $('#play i').removeClass('icon-pause').addClass('icon-play');
+        $('#play i').removeClass('fa-pause').addClass('fa-play');
         slideshow = false;
         window.clearInterval(slideshowtimer);
     }
@@ -272,8 +273,8 @@ var photongx = (function() {
         if (c == 0) {
             // we are at the start, figure out the amount of items and
             // go to the end
-            c = $('.item').length;
-        }else if (c > ($('.item').length)) {
+            c = $items.length;
+        }else if (c > ($items.length)) {
             c = 1; // Lua starts at 1 :)
         }
 
@@ -283,8 +284,10 @@ var photongx = (function() {
     // it wraps on start and end, and preloads 3 images in the current 
     // scrolling direction
     this.navigateImage = function(c) {
-        var image_href = $('#image-'+c).attr('href');
+        var imageelement = $('#image-'+c);
+        var image_href = imageelement.attr('href');
         setLBimage(image_href);
+        countView(imageelement.data('filename'));
 
         var cone = c+1, ctwo = c+2 , cthree = c+3;
         // We are going backwards
@@ -299,6 +302,18 @@ var photongx = (function() {
             //$('#image-'+String(parseInt(ctwo))).attr('href'),
             //$('#image-'+String(parseInt(cthree))).attr('href')
         currentimage = c;
+    }
+
+    //
+    // Function responsible for counting clicks/views in the backend
+    //
+    this.countView = function(file_name) {
+        // Backend wants the original file name as a key to use for counting
+        $.getJSON('/api/img/click/', { 'img':file_name}, function(data) {
+            if (!data.views > 0) {
+                console.log('Error counting clicks. Response from backend was',data);
+            }
+        });
     }
 
     $(document).on('next_image', function (evt) {
@@ -360,5 +375,7 @@ var photongx = (function() {
             $('#play').click();
         }
     });
+
+
     return this;
 });
